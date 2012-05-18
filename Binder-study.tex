@@ -1714,7 +1714,8 @@ Binder 库中有两个状态的类：
 ProcessState 是表示进程状态的库类, 其成员 spawPooledThread 是启动线程池的，ps
 -t 命令显示的， Binder Thread \#1 的线程就是她的杰作。 有关进程号， 轻量级进
 程（线程）
-IPCThreadState 是处理线程状态及线程池的类
+IPCThreadState 是处理线程状态及线程池的类。 这两个类只对服务进程有用，客户进程
+是用不着这么麻烦的。
 
 ProcessState::self()->startThreadPool(); 
 
@@ -1741,7 +1742,29 @@ Thread::_threadLoop 是线程的入口函数, 参数就是 Thread派生类的 th
 _threadLoop 会调用 派生类的 threadLoop 函数。 ProcessState 没有保留 PoolThread
 的对象，其引用不会为0. 所以， _threadLoop 的循环不会退出。
 
-我们关注的是 IPCThreadState::joinThreadPool 的循环，BINDER_WRITE_READ 的ioctl
+
+疑问，ProcessState::self()->startThreadPool(); 在服务器端不调用会怎么样？
+客户端是否也使用了ProcessState 及 IPCThreadState？
+
+我们关注的是 IPCThreadState::joinThreadPool 的循环.
+joinThreadPool 首先调用
+mOut.writeInt32(isMain ? BC_ENTER_LOOPER : BC_REGISTER_LOOPER);
+第一次循环，下列条件不成立：
+mIn.dataPosition() >= mIn.dataSize()
+其下代码块跳过之后，就是
+ result = talkWithDriver();
+如执行无误，从 mIn 中取出命令（命令的是int32_t, 取命令前先判断mIn的数据长度是
+否够装命令）， 交给 executeCommand 执行。
+检查了 talkWithDriver 和 executeCommand 没有发现等待，如sleep,wait 等命令。
+这个看似是简单的for循环。但是，setpriority、androidSetThreadSchedulingGroup 其
+实是对循环的优化。
+
+假如线程退出循环，发命令告诉驱动：
+    mOut.writeInt32(BC_EXIT_LOOPER);
+    talkWithDriver(false);
+
+
+BINDER_WRITE_READ 的ioctl
 才会发生 进程迁移， 别的 binder ioctl 是不会发生进程迁移的。
 
 \typeout{增加内容，细化}
@@ -1757,6 +1780,8 @@ case BR_SPAWN_LOOPER:
         mProcess->spawnPooledThread(false);
         break;
 
+改变一些写法， 静态分析，跟着代码走，比较类。  动态分析， 让代码按我们的思路来走， 当
+然这要对binder有一定了解之后。
 
 客户端获取服务
 defaultServiceManager  返回 IServiceManager，通过 IServiceManager的方法 getService 获取 IBinder，通过 interface_cast 把接口从 IBinder 类型转变为 IHolder 类型。
