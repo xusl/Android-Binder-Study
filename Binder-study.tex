@@ -74,7 +74,7 @@ citecolor=magenta, linkcolor=blue]{hyperref}
 %\titlecontents{section}[1.5em]{}{\thecontentslabel}{}{\dotfill \contentspage}
 %\titlecontents{section}[1.5em]{\color{blue}\normalsize\addvspace{1.0ex}}{\contentslabel{2em}\hspace∗{−0.0em}}{\hspace∗{−3.3em}}{\color{black}\titlerule ∗[0.8pc]{}\contentspage}
 \setlength{\parskip}{1ex}
-\headheight13.6pt
+\headheight13.8pt
 \tableofcontents
 \makeatletter
 \newcommand{\figcaption}{\def\@captype{figure}\caption}
@@ -113,11 +113,14 @@ arg)函数实现交互。命令由参数cmd承载，数据由参数arg承载，�
 列举了所有命令及其所对应的数据：\\*
 \begin{minipage}{\textwidth}
 \tabcaption{Binder 协议}
-\begin{tabular}{|p{0.43\textwidth}|p{0.52\textwidth}|}\hline
+\footnotesize
+\begin{tabular}{|p{0.4\textwidth}|p{0.5\textwidth}|}\hline
     BINDER_WRITE_READ & 该命令向 Binder 写入或读取数据。
     参数见\ref{binderwriteread}。\\\hline
-    BINDER_SET_MAX_THREADS & 设置进程的最大生成线程 max_threads，具体操作
-    BC_REGISTER_LOOPER 时用到。\ref{BinderThreadPool}\\\hline
+
+    BINDER_SET_MAX_THREADS & 设置进程的最大生成线程 max_threads，
+    参见\ref{BinderThreadPool}\\\hline
+
     BINDER_SET_CONTEXT_MGR & 设置当前进程为 service manager，用
         全局变量记录下来。 \footnote{binder 是一个服务和客户通讯的协议，客户为了
         能跟服务搭上线，需要有个地方能查找服务的实际所在，只有在获取服
@@ -127,8 +130,7 @@ arg)函数实现交互。命令由参数cmd承载，数据由参数arg承载，�
         没有调用 close() 关闭 Binder 驱动就不能有别的进程可以成为service manager。}
         \\\hline
     BINDER_THREAD_EXIT & 通知 Binder 驱动当前线程退出了。 Binder 会为所有参与
-    Binder 通信的线程（包括 Server 线程池中的线程和
-    Client发出请求的线程）建立相应的数据结构。这些线程在退出时必须通知驱动释放
+    Binder 通信的线程（包括服务端线程池中的线程和客户端发出请求的线程）建立相应的数据结构。这些线程在退出时必须通知驱动释放
     相应的数据结构。\footnote{当前线程退出 binder 驱动，清理其在binder_get_thread 中创建
     的节点，同时会给那些跟他 transaction的线程发个 BR_DEAD_REPLY 表明自己挂了
     。}\\\hline
@@ -167,10 +169,10 @@ binder_write_read结构 write_buffer 域指向的内存空间里，多条命令�
 数据紧接着存放在命令后面，格式根据命令不同而不同。下表列举了 Binder 写操作支持
 的命令：
 
-\begin{minipage}{\linewidth}
+\begin{minipage}{0.95\linewidth}
 \footnotesize
 \tabcaption{Binder 操作命令}\label{BinderCommands}
-\begin{tabular}{|p{0.3\textwidth}|p{0.7\textwidth}|}\hline
+\begin{tabular}{|p{0.3\textwidth}|p{0.6\textwidth}|}\hline
     BC_TRANSACTION & 用于客户端向服务端发送请求数据\ref{BinderTransaction}\\
     BC_REPLY & 用于服务端向客户端发送回复数据。\\\hline
     BC_FREE_BUFFER & 释放一块映射的内存。\ref{BinderMemoryMap} \\\hline
@@ -202,12 +204,12 @@ binder_write_read结构 write_buffer 域指向的内存空间里，多条命令�
 
 \subsubsection{Binder 的返回值}
 从Binder里读出的数据格式和向Binder中写入的数据格式一样，采用（消息
-ID+数据）形式，并且多条消息可以连续存放。下表列举了从Binder读出的命令字及其相
+ID + 数据）形式，并且多条消息可以连续存放。下表列举了从Binder读出的命令字及其相
 应的参数：\\*
 \tabcaption{Binder 返回值协议} \label{proto:binderreturn}
-\begin{table}[h]
+\begin{table}[ht]
 \footnotesize
-\begin{tabular}{|p{0.4\textwidth}|p{0.6\textwidth}|}\hline
+\begin{tabular}{|p{0.4\textwidth}|p{0.5\textwidth}|}\hline
     BR_ERROR & 发生内部错误（如内存分配失败） \\\hline
     BR_OK \newline BR_NOOP & 操作完成 \\\hline
     BR_SPAWN_LOOPER & 该消息用于接收方线程池管理。当驱动发现接收方所有线程都处
@@ -242,6 +244,10 @@ Binder本质上只是一种底层通信方式，和具体服务没有关系。�
 模式：将接口函数定义在一个抽象类中，服务端和客户端都会以该抽象类为基类实现所有
 接口函数，所不同的是服务端是真正的功能实现，而客户端是对这些函数远程调用请
 求的包装。
+
+我们要明白两件事：一是我们用户如何使用，使用 Binder 的架构; 二是 本地Binder 和
+远程 Binder 是如何通讯。这都是和我们具体工作密切相关的问题，明白的这些基本的问
+题，我们阅读代码会更流畅，书写的代码更有保证。
 
 \subsection{实例：用户看到的Binder和接口}
 
@@ -406,12 +412,12 @@ IPCThreadState::self()->joinThreadPool();
 本地接口实例化的地方。
 
 
-远程 Binder 的实例化在 ProcessState::getStrongProxyForHandle\label{code:getStrongProxyForHandle}、
-ProcessState::getWeakProxyForHandle。
+远程 Binder 的实例化在 ProcessState的 getStrongProxyForHandle\label{code:getStrongProxyForHandle}、
+和 getWeakProxyForHandle。
 具体来讲，Parcel 类 acquire_object、release_object、unflatten_binder 函
 数在处理 BINDER_TYPE_HANDLE 类型的 binder 时会调用
-ProcessState::getStrongProxyForHandle, 处理 BINDER_TYPE_WEAK_HANDLE 类型时调用
-ProcessState::getWeakProxyForHandle 等等来实例化本地binder。
+getStrongProxyForHandle, 处理 BINDER_TYPE_WEAK_HANDLE 类型时调用
+getWeakProxyForHandle 等等来实例化本地binder。
 
 不管客户进程还是服务进程，只要调用defaultServiceManager 就必须实例化一个
 BpBinder 对象， 这个对象是 Service Manager 的远程 Binder, 而且handle号是0。
@@ -434,13 +440,6 @@ RefBase::incStrong -> BpBinder::onFirstRef -> IPCThreadState::incStrongHandle
 对象，再获得服务，即接口的Binder对象， 然后转型为接口，方可使用，相比之下多了
 三步。
 
-客户还是服务进程，都的首先创建一个 BpServiceManager，因为他们都得和 servicemanager 通讯。
-
-服务进程并没有保存EneaBufferService对象，这个对象保存
-在了 Service Manager里，所以服务进程也不直接调用接口的各种方法, 它也是个"客户端"。
-但是服务进程和客户进程获得的Binder对象还是不一样的，前者是本地Binder，而后者是
-远程Binder。 也就是说 客户与服务进程在调用 getService 返回的 Binder 对象是不同
-的。
 \begin{lstlisting}
 static sp<IEneaBuffer> eneaBuffer = NULL;
 
@@ -455,36 +454,48 @@ if (eneaBuffer == NULL) {
 }
 \end{lstlisting}
 
+客户还是服务进程，都的首先创建一个 BpServiceManager，因为他们都得和 servicemanager 通讯。
 
-    \subsection{Service manager}\label{process:servicemanager}
-    getService 的差异我们首先去查看service_manager.c 的函数 find_svc，发现他根
-    本不区分 本地binder 还是远程binder。 回头看 BpServiceManager， getService
-    实际调用 checkService， 检查 checkService，定位可疑点是
-    reply.readStrongBinder()， 即 Parcel::readStrongBinder 函数, 进一步是
-    unflatten_binder ，这时我们看到了
-    getStrongProxyForHandle\ref{code:getStrongProxyForHandle}。
-所以，getService 实际也会实例化 BpBinder 对象。
- 另外，当服务未启动时， getService 会等待， 输出日志 "Waiting for service xxx"
- ，系统初始化 SurfaceFlinger 会出现这种情况。
+服务进程并没有保存EneaBufferService对象，这个对象保存
+在了 Service Manager里，所以服务进程也不直接调用接口的各种方法, 它也是个"客户端"。
+但是服务进程和客户进程获得的Binder对象还是不一样的，前者是本地Binder，而后者是
+远程Binder。 也就是说 客户与服务进程在调用 getService 返回的 Binder 对象是不同
+的。
 
-    Service manager 有必要澄清一下. Binder 库定义了 IServiceManager、
-    BpServiceManager、BnServiceManager。 但是BnServiceManager 在真机上没有用的
-    ，因为她的派生类ServiceManager
-    \footnote{frameworks/base/cmds/runtime/ServiceManager.cpp，名叫runtime进程}
-    仅仅在模拟器上使用，不管这个可以帮我们理解Binder库原理的。真机上， 服务管理器的程序叫 servicemanager， 代码在 
-    frameworks/base/cmds/servicemanager 里。 所以，服务进程或客户进程调用了
-    IServiceManager 的接口后，经 BpServiceManager 代理入驱动后，最后传给了
+
+Service manager 有必要澄清一下. Binder 库定义了 IServiceManager、
+BpServiceManager、BnServiceManager。 但是BnServiceManager派生类ServiceManager
+\cite{BinderRuntime}只被程序runtime使用，这个程序只在模拟器上使用。真
+机上， 服务管理器的程序叫 servicemanager， 代码在 \cite{ServiceManager}里。 
+服务进程或客户进程调用了IServiceManager 的接口后，经 BpServiceManager 代理入驱动后，最后传给了
     servicemanager。
 
-    需要注意的是成员的编码，IServiceManager 定义为 GET_SERVICE_TRANSACTION、
-    CHECK_SERVICE_TRANSACTION、ADD_SERVICE_TRANSACTION、
-    LIST_SERVICES_TRANSACTION，在servicemanager里改了名称，叫
-    SVC_MGR_GET_SERVICE、SVC_MGR_CHECK_SERVICE, SVC_MGR_ADD_SERVICE, SVC_MGR_LIST_SERVICES,
+需要注意是servicemanager里未采用IServiceManager里成员的编码宏名
+\begin{table}[ht]
+\footnotesize
+\begin{tabular}{|p{0.4\textwidth}|p{0.4\textwidth}|}\hline
+IServiceManager定义的宏名 & servicemanager对应的宏名\\\hline
+GET_SERVICE_TRANSACTION \newline CHECK_SERVICE_TRANSACTION \newline
+ADD_SERVICE_TRANSACTION\newline LIST_SERVICES_TRANSACTION &
+SVC_MGR_GET_SERVICE \newline SVC_MGR_CHECK_SERVICE\newline 
+SVC_MGR_ADD_SERVICE\newline SVC_MGR_LIST_SERVICES \\\hline
+\end{tabular}
+\end{table}
+我们查看service_manager.c 的函数 find_svc，发现getService根本不区分 本地binder
+还是远程binder。 回头看 BpServiceManager， 检查 checkService，定位可疑点是
+reply.readStrongBinder()， 即 Parcel类的readStrongBinder 函数, 进一步是
+unflatten_binder ，这时看到了getStrongProxyForHandle\ref{code:getStrongProxyForHandle}。
+所以，getService 实际也会实例化 BpBinder 对象。
+
 
 writeStrongBinder flatten_binder finish_flatten_binder writeObject 
 readStrongBinder unflatten_binder readObject 
 
 flatten_binder 对本地binder 和 远程 binder 作了区分的。
+
+ 另外，当服务未启动时， getService 会等待， 输出日志 "Waiting for service xxx"
+ ，系统初始化 SurfaceFlinger 会出现这种情况。
+
 \subsection{ProcessState}
 \ref{addservice}
 Binder 库中有两个状态的类，其含义可以从其名字可知：
@@ -723,7 +734,7 @@ data.buffer 所指向的缓存区中。如果发送方在数据中内嵌了一�
 到的数据包中同样会用 data.offsets 和 offset_size 指出每个 Binder
 的位置和总个数。
 
-\begin{minipage}{\textwidth}
+\begin{minipage}{0.9\linewidth}
 \includegraphics[scale=0.66]{binderproto.jpg}
 
 \caption{ BINDER_WRITE_READ数据包结构\label{fig:BinderData}}
@@ -770,8 +781,7 @@ struct flat_binder_object {
     \item [binder/handle]
         
         联合体 binder/handle 就对应于 binder_node 的 ptr 或者 binder_desc 的
-        desc。
-        传递本地Binder时使用binder域，指向Binder在服务进程中的地址。
+        desc。传递本地Binder时使用binder域，指向Binder在服务进程中的地址。
         传递远程Binder时使用handle域，存放Binder的引用号。
 
     \item [cookie] 
@@ -781,9 +791,9 @@ struct flat_binder_object {
 
     \item [flags]
         
-            7\~{}0 bits 设置 binder_node 线程优先级，远程进程的对 \binder 的操作请求会由\binder
-            本地进程的一个线程完成，而这个优先级就是用来设置该线程处理这个
-            \binder 事物时的优先级。
+            7\~{}0 bits 设置 binder_node 线程优先级，远程进程的对 \binder
+            的操作请求会由\binder 本地进程的一个线程完成，而这个优先级就是用来
+            设置该线程处理这个\binder 事物时的优先级。
 
             8th bit 是用来表示这个binder是否接受文件描述符的，不支持
             文件描述符的 \binder 是没法用 BINDER_TYPE_FD 的。
@@ -918,7 +928,7 @@ struct binder_node {
     的，所以不会重复建设造成混乱。
 
 \tabcaption{结构成员解析}
-\begin{longtable}{|p{0.3\textwidth}|p{0.7\textwidth}|}\hline
+\begin{longtable}{|p{0.3\textwidth}|p{0.6\textwidth}|}\hline
     work \ref{BinderWork}& 当本节点引用计数发生改变，需要通知所属进程时，通过
     该成员挂入所属进程的to-do队列里，唤醒所属进程执行Binder实体引用计数的修改
     。\\\hline
@@ -1193,8 +1203,8 @@ binder_thread ，并记录到进程的 threads 中。所以，进程的 threads
 步是 write ，会传给驱动一些以 BC_ 开头的命令，让驱动去执行，一次可以传多个命令
 。第二步是 read，会从驱动获取一些以 BR_ 开头的回复，也可能是多个，上层 binder
 库可以根据这些回复做相应的操作， read 这一步有可能阻塞当前线程，直到驱动给他回
-复并唤醒它。
-因为可能会有许多客户端同时发起请求，服务进程为了提高效率往往开辟线程池并发处理收到的请求。
+复并唤醒它。因为可能会有许多客户端同时发起请求，服务进程为了提高效率往往开辟线
+程池并发处理收到的请求。
 
 所谓的线程池跟平时说的线程区别并不大， 进程会产生一些线程， 让他们做无限循环，
 在循环里等待， 直到外界有工作传来， 该线程便被唤醒， 待到该线程干完活之后，
@@ -1499,22 +1509,34 @@ copy_from_user()拷贝到内核空间，再用copy_to_user()拷贝到另一个�
 
 \subsection{module参数} \index{param}
 参数可在/sys/module/binder/parameters下找到，可读可写。
-\begin{description*}
-    \item[debug_mask]调试标志位，参考 enum BINDER_DEBUG_XXX，相应 bit置 1 能看到相应的调试信息，都是 KERN_INFO 级别。不过 adb 下是看不到printk 的，得 dmesg 或者用串口看。这个参数的设置可以帮助理解 Binder 驱动的工作流程。
-    \item[proc_no_lock] 查看 proc 文件时是否加 Binder 全局锁，一般不加，查看 proc 一般也不需要得到最准确的信息，没必要锁着，影响 Binder 工作。
-    \item[stop_on_user_error]\label{paramstop} 设置为 0 时，不起作用，设置为 1 时，如果某个进程调用 binder 时发生错误，则该进程 sleep，以后别的进程再调用 binder 的 ioctl 也会 sleep，此时你若往这个参数写入一个小于 2 的数，进程会被唤醒。设置为 2 以上的值，那悲剧了，ioctl 直接睡觉。该参数默认为 0。
-\end{description*}
+\begin{itemize*}
+    \item debug_mask 
+    调试标志位，参考 enum BINDER_DEBUG_XXX，相应 bit置 1 能看到相应的调试信息
+    ，都是 KERN_INFO 级别。不过 adb 下是看不到printk 的，得 dmesg 或者用串口看
+    。这个参数的设置可以帮助理解 Binder 驱动的工作流程。
+
+    \item proc_no_lock 
+    
+    查看 proc 文件时是否加 Binder 全局锁，一般不加，查看 proc 一般也不需要得到
+    最准确的信息，没必要锁着，影响 Binder 工作。
+
+    \item stop_on_user_error \label{paramstop}
+    设置为 0 时，不起作用，设置为 1 时，如果某个进程调用 binder 时发生错误，则
+    该进程 sleep，以后别的进程再调用 binder 的 ioctl 也会 sleep，此时你若往这
+    个参数写入一个小于 2 的数，进程会被唤醒。设置为 2 以上的值，那悲剧了，
+    ioctl 直接睡觉。该参数默认为 0。
+\end{itemize*}
 
 \subsection{文件操作}
 static const struct file_operations binder_fops
 
 \subsubsection{binder_open} \index{fileopen} 
-\begin{description}
-    \item[创建 binder_proc 结构体]用来记录调用进程的信息，并进行相关初
+\begin{itemize*}
+    \item 创建 binder_proc 结构体, 用来记录调用进程的信息，并进行相关初
         始化工作。将该结构体指针记录到 filp->private_data，这样以后别的文件操
         作都能得到当前进程的 Binder 信息。
-    \item[建立/proc/binder/pid文件] 用于查询进程的binder信息。
-\end{description}
+    \item 建立/proc/binder/pid文件, 用于查询进程的binder信息。
+\end{itemize*}
 
 \subsubsection{binder_mmap}\label{Bindermmap}
 内核内存空间中分配最大4M的\textbf{\color{red}连续空间}给进程，并关联到进程的用户空间。
@@ -2570,10 +2592,12 @@ getHolder done!!!
         2011-07-12
     \bibitem {BinderRD} \href{http://blog.csdn.net/universus/article/details/6211589}{Android Bander设计与实现 - 设计篇}
     \bibitem {BinderKernel}drivers/staging/android/: binder.c, binder.h
-    \bibitem {library header}frameworks/base/include/binder/: IBinder.h
+    \bibitem {BinderHeader}frameworks/base/include/binder/: IBinder.h
     \bibitem {BinderCpp}frameworks/base/libs/binder/:  Binder.cpp BpBinder.cpp
     \bibitem {utils} frameworks/base/include/utils
     \bibitem {utilsHeader} frameworks/base/libs/utils 
+    \bibitem {ServiceManager} frameworks/base/cmds/servicemanager
+    \bibitem {BinderRuntime} frameworks/base/cmds/runtime/ServiceManager.cpp
 \end{thebibliography}
 \printindex
 
