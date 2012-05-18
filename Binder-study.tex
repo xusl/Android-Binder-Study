@@ -377,9 +377,7 @@ BpRefBase::BpRefBase(const sp<IBinder>& o)
     }
 }
 
-\end{lstlisting}
-
-
+\end{lstlisting} 
 
 本地binder 转换是很方便，她具备双重属性, BnEneaBuffer
 既继承了IBinder，又继承了IEneaBuffer，他在这两种转换之间都是平滑的，直接返回自
@@ -387,19 +385,14 @@ BpRefBase::BpRefBase(const sp<IBinder>& o)
 IInterface 新建 BpEneaBuffer 对象，从IInterface 转 IBinder 时， 方法
 remote()\ref{code:remote}。需要 BpRefBase
 保存的BpBinder对象。
-
-
  
-\subsubsection{如何创建}
+\subsection{如何创建}
 但是，从客户角度来讲，他所直接接触的并不是 本地binder 还是 远程binder
 而是本地 接口和远程接口。 我们需要知道 本地接口和远程接口是如何接上头的。
 
 从远程binder的构造函数，我们可以知道， 远程binder 和
 本地binder建立联系的纽带是所谓的 handle，这是32位的数值，其中0是有特殊含义，表
 示binder manager的，我们定义的 binder 是从1 开始编号的。
-
-
-Binder 是 IPC，所以典型的情况是一个服务进程，一个客户进程，背后隐藏了的Service Manager。
 
 服务进程启动后，实例化EneaBufferService对象并把它加到Service Manager，就真在提供服务。 
 \begin{lstlisting}[label={addservice}]
@@ -410,7 +403,7 @@ IPCThreadState::self()->joinThreadPool();
 \end{lstlisting}
 这是本地 Binder 的实例化的地方了，一般情况下，也是唯一的一个地方。当然，这也是
 本地接口实例化的地方。
-
+好像在 addService 时 ，service manager 创建了一个 BpBidner？
 
 远程 Binder 的实例化在 ProcessState的 getStrongProxyForHandle\label{code:getStrongProxyForHandle}、
 和 getWeakProxyForHandle。
@@ -419,23 +412,20 @@ IPCThreadState::self()->joinThreadPool();
 getStrongProxyForHandle, 处理 BINDER_TYPE_WEAK_HANDLE 类型时调用
 getWeakProxyForHandle 等等来实例化本地binder。
 
-不管客户进程还是服务进程，只要调用defaultServiceManager 就必须实例化一个
-BpBinder 对象， 这个对象是 Service Manager 的远程 Binder, 而且handle号是0。
-过程是：\\*
-defaultServiceManager 调用 ProcessState::getContexObject, 后者以参数0调用
-ProcessState::getStrongProxyForHandle。
+参见 \ref{GetService}， 再用这个binder 调用接口 asInterface 来获取接口，对于本地binder来说就是返回自
+ 身，而对于远程binder。如 \ref{code:asInterface} 所述，asInterface 是本地接口（如 BpEneaBuffer）唯一
+的实例化地方。  
 
 
-
-getService 后获得一个远程的binder， 再用这个binder 调用 接口 asInterface。
-如 \ref{code:asInterface} 所述，asInterface 是本地接口（如 BpEneaBuffer）唯一
-的实例化地方。 好像在 addService 时 ，service manager 创建了一个 BpBidner？ 
-回顾一下， \ref{BpInterfaceConstructor},
+但是本地接口话的时候，不仅仅是靠binder句柄，里面还有文章的，跟驱动引用计数有关
+。回顾一下， \ref{BpInterfaceConstructor},
 BpRefBase   mRemote->incStrong(this); 实际调用的流程：
 RefBase::incStrong -> BpBinder::onFirstRef -> IPCThreadState::incStrongHandle
 发出了一个 BC_ACQUIRE 的命令
 
-\subsubsection{如何使用接口}
+\subsection{如何使用接口}
+Binder 是 IPC，所以典型的情况是一个服务进程，一个客户进程，背后隐藏了的Service Manager。
+
 其实不管服务进程，还是客户进程，使用 接口的对象，首先要获得IServiceManager
 对象，再获得服务，即接口的Binder对象， 然后转型为接口，方可使用，相比之下多了
 三步。
@@ -455,13 +445,17 @@ if (eneaBuffer == NULL) {
 \end{lstlisting}
 
 客户还是服务进程，都的首先创建一个 BpServiceManager，因为他们都得和 servicemanager 通讯。
+客户进程和服务进程，都要调用defaultServiceManager 就必须实例化一个
+BpBinder 对象， 这个对象是 Service Manager 的远程 Binder, 而且handle号是0。
+过程是：\\*
+defaultServiceManager 调用 ProcessState::getContexObject, 后者以参数0调用
+ProcessState::getStrongProxyForHandle。
 
 服务进程并没有保存EneaBufferService对象，这个对象保存
 在了 Service Manager里，所以服务进程也不直接调用接口的各种方法, 它也是个"客户端"。
 但是服务进程和客户进程获得的Binder对象还是不一样的，前者是本地Binder，而后者是
 远程Binder。 也就是说 客户与服务进程在调用 getService 返回的 Binder 对象是不同
 的。
-
 
 Service manager 有必要澄清一下. Binder 库定义了 IServiceManager、
 BpServiceManager、BnServiceManager。 但是BnServiceManager派生类ServiceManager
@@ -484,14 +478,15 @@ SVC_MGR_ADD_SERVICE\newline SVC_MGR_LIST_SERVICES \\\hline
 我们查看service_manager.c 的函数 find_svc，发现getService根本不区分 本地binder
 还是远程binder。 回头看 BpServiceManager， 检查 checkService，定位可疑点是
 reply.readStrongBinder()， 即 Parcel类的readStrongBinder 函数, 进一步是
-unflatten_binder ，这时看到了getStrongProxyForHandle\ref{code:getStrongProxyForHandle}。
-所以，getService 实际也会实例化 BpBinder 对象。
+unflatten_binder 。\label{GetService} 
+unflatten_binder 显然是对本地 binder 和远程binder 做了区分的。
+如同 flatten_binder 对本地binder 和 远程 binder 作了区分的。
 
-
+写入流程：
 writeStrongBinder flatten_binder finish_flatten_binder writeObject 
+读取流程：
 readStrongBinder unflatten_binder readObject 
 
-flatten_binder 对本地binder 和 远程 binder 作了区分的。
 
  另外，当服务未启动时， getService 会等待， 输出日志 "Waiting for service xxx"
  ，系统初始化 SurfaceFlinger 会出现这种情况。
